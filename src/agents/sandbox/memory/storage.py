@@ -205,7 +205,7 @@ class SandboxMemoryStorage:
         except Exception:
             return []
 
-        items: list[tuple[tuple[int, str], str, PhaseTwoSelectionItem]] = []
+        items: list[tuple[tuple[int, float, str], str, PhaseTwoSelectionItem]] = []
         for entry in entries:
             if entry.is_dir():
                 continue
@@ -224,15 +224,33 @@ class SandboxMemoryStorage:
         return [item[2] for item in items]
 
 
-def _updated_at_sort_key(raw_memory: str) -> tuple[int, str]:
+def _updated_at_sort_key(raw_memory: str) -> tuple[int, float, str]:
     for line in raw_memory.splitlines():
         if line.startswith("updated_at:"):
             _, value = line.split(":", maxsplit=1)
             updated_at = value.strip()
             if not updated_at or updated_at == "unknown":
-                return (0, "")
-            return (1, updated_at)
-    return (0, "")
+                return (0, 0.0, "")
+            parsed = _parse_updated_at(updated_at)
+            if parsed is None:
+                # Unparseable values keep the previous lexicographic ordering among themselves.
+                return (1, 0.0, updated_at)
+            return (2, parsed.timestamp(), "")
+    return (0, 0.0, "")
+
+
+def _parse_updated_at(value: str) -> datetime | None:
+    # Python 3.10's fromisoformat() does not accept a trailing "Z".
+    if value.endswith(("Z", "z")):
+        value = f"{value[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        # Timestamps written by this module are UTC, so treat naive values as UTC.
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
 def _extract_selection_item(raw_memory: str) -> PhaseTwoSelectionItem | None:

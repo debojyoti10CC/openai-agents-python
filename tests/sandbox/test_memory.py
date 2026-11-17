@@ -591,6 +591,22 @@ def test_render_memory_consolidation_prompt_lists_removed_rollouts() -> None:
     assert "updated_at=unknown" in prompt
 
 
+def test_updated_at_sort_key_compares_instants_across_utc_offsets() -> None:
+    newer = "updated_at: 2026-11-16T23:30:00-05:00\n"  # 2026-11-17 04:30 UTC
+    older = "updated_at: 2026-11-17T03:30:00+00:00\n"  # 2026-11-17 03:30 UTC
+
+    assert _updated_at_sort_key(newer) > _updated_at_sort_key(older)
+    assert _updated_at_sort_key("updated_at: 2026-11-17T03:30:00Z\n") == _updated_at_sort_key(older)
+    # Naive timestamps are treated as UTC.
+    assert _updated_at_sort_key("updated_at: 2026-11-17T03:30:00\n") == _updated_at_sort_key(older)
+    # Unparseable values rank below parseable ones but above unknown.
+    assert (
+        _updated_at_sort_key("updated_at: unknown\n")
+        < _updated_at_sort_key("updated_at: garbage\n")
+        < _updated_at_sort_key(older)
+    )
+
+
 def test_updated_at_sort_key_places_unknown_timestamps_last() -> None:
     assert _updated_at_sort_key("updated_at: 2025-03-01T00:00:00Z\n") > _updated_at_sort_key(
         "updated_at: unknown\n"
